@@ -1,41 +1,42 @@
-import { Player } from "..";
-import { InputComponent } from "../../../../engine/_components/InputComponent";
-import { PhysicsComponent } from "../../../../engine/_components/PhysicsComponent";
-import { Script } from "../../../../engine/utils/Script";
-import { Velocity } from "../../../../engine/utils/Velocity";
+import { UI } from "@/assets/UI";
+import { Field, Player } from "@/assets/actors";
+import { GameStateSystem } from "@/assets/systems/GameState";
+import { InputComponent } from "@/engine/_components";
+import { Script } from "@/engine/utils";
+import { Body } from "matter-js";
+import { PlayerSprintBar } from "../components/SprintBar";
 
 interface MovementScriptProps {
-  player: Player;
+  inputComponent: InputComponent;
 }
 
 export class MovementScript extends Script {
-  playerPhysics: PhysicsComponent;
   movementInput: InputComponent;
-  force = 10;
+  thrust = 0.05;
   runForceMultiplier = 1.5;
-  maxVelocityWalking: Velocity;
-  maxVelocityRunning: Velocity;
+  maxSpeedWalking: number;
+  maxSpeedRunning: number;
+  unitWear = 1;
+  unitRecoverPace = 2;
+  isInstanceField = false;
 
   constructor(props: MovementScriptProps) {
     super();
 
-    this.playerPhysics = props.player.getComponent(PhysicsComponent)!;
-    this.movementInput = new InputComponent();
-    this.maxVelocityWalking = this.playerPhysics.maxVelocity;
-    this.maxVelocityRunning = {
-      dx: this.playerPhysics.maxVelocity.dx * this.runForceMultiplier,
-      dy: this.playerPhysics.maxVelocity.dy * this.runForceMultiplier,
-    };
+    this.movementInput = props.inputComponent;
+    this.maxSpeedWalking = Player.maxSpeed;
+    this.maxSpeedRunning = Player.maxSpeed * this.runForceMultiplier;
     this.start();
   }
-  update(timestamp: number) {
-    super.update(timestamp);
 
-    const isUp = this.movementInput.isKeyDown("KeyW");
-    const isDown = this.movementInput.isKeyDown("KeyS");
-    const isLeft = this.movementInput.isKeyDown("KeyA");
-    const isRight = this.movementInput.isKeyDown("KeyD");
-    const isShift = this.movementInput.isKeyDown("ShiftLeft");
+  private detectMovementByInput() {
+    let force = { x: 0, y: 0 };
+
+    const isUp = this.movementInput.isButtonDown("KeyW");
+    const isDown = this.movementInput.isButtonDown("KeyS");
+    const isLeft = this.movementInput.isButtonDown("KeyA");
+    const isRight = this.movementInput.isButtonDown("KeyD");
+    const isShiftDown = this.movementInput.isButtonDown("ShiftLeft");
 
     const isMoving = isUp || isDown || isLeft || isRight;
 
@@ -48,42 +49,109 @@ export class MovementScript extends Script {
     const isOnlyVerticalOrHorizontal =
       !isUpLeft && !isUpRight && !isDownLeft && !isDownRight;
 
-    if (isShift && isMoving) {
-      this.playerPhysics.maxVelocity = this.maxVelocityRunning;
-    } else {
-      this.playerPhysics.maxVelocity = this.maxVelocityWalking;
-    }
-
     // Aplicar forças conforme as teclas pressionadas
     if (isUp && isOnlyVerticalOrHorizontal) {
-      this.playerPhysics.applyForceToDirection("UP", this.force);
+      force = { x: 0, y: -this.thrust };
     }
     if (isDown && isOnlyVerticalOrHorizontal) {
-      this.playerPhysics.applyForceToDirection("DOWN", this.force);
+      force = { x: 0, y: this.thrust };
     }
     if (isLeft && isOnlyVerticalOrHorizontal) {
-      this.playerPhysics.applyForceToDirection("LEFT", this.force);
+      force = { x: -this.thrust, y: 0 };
     }
     if (isRight && isOnlyVerticalOrHorizontal) {
-      this.playerPhysics.applyForceToDirection("RIGHT", this.force);
+      force = { x: this.thrust, y: 0 };
     }
+
+    const diagonalThrust = Math.sqrt(Math.pow(this.thrust, 2) / 2);
+
     // Movimentos diagonais
     if (isUpLeft) {
-      this.playerPhysics.applyForceToDirection("UP_LEFT", this.force);
+      force = { x: -diagonalThrust, y: -diagonalThrust };
     }
     if (isUpRight) {
-      this.playerPhysics.applyForceToDirection("UP_RIGHT", this.force);
+      force = { x: diagonalThrust, y: -diagonalThrust };
     }
     if (isDownLeft) {
-      this.playerPhysics.applyForceToDirection("DOWN_LEFT", this.force);
+      force = { x: -diagonalThrust, y: diagonalThrust };
     }
     if (isDownRight) {
-      this.playerPhysics.applyForceToDirection("DOWN_RIGHT", this.force);
+      force = { x: diagonalThrust, y: diagonalThrust };
     }
 
     // Se nenhuma tecla estiver pressionada, pare o jogador
     if (!isMoving) {
-      this.playerPhysics.accelerate({ x: 0, y: 0 });
+      force = { x: 0, y: 0 };
     }
+
+    if (isShiftDown) {
+      const isPlayerMoving =
+        Player.body.velocity.x !== 0 || Player.body.velocity.y !== 0;
+
+      if (isPlayerMoving) {
+        this.startSprintMode();
+      }
+    } else {
+      this.recoverSprintMode();
+    }
+
+    //Verifica se atingiu a velocidade máxima
+    if (Player.body.speed < Player.maxSpeed) {
+      Body.applyForce(Player.body, Player.body.position, force);
+      Body.setPosition(Player.actionArea.body, Player.body.position);
+    }
+  }
+
+  private startSprintMode() {
+    if (PlayerSprintBar.progress <= 0) {
+      Player.maxSpeed = this.maxSpeedWalking;
+
+      return;
+    }
+
+    Player.maxSpeed = this.maxSpeedRunning;
+    PlayerSprintBar.isRendering = true;
+
+    if (PlayerSprintBar.progress > 0) {
+      PlayerSprintBar.progress -= this.unitWear / Player.maxPace;
+    } else {
+      PlayerSprintBar.progress = 0;
+    }
+  }
+
+  private recoverSprintMode() {
+    Player.maxSpeed = this.maxSpeedWalking;
+    PlayerSprintBar.isRendering = false;
+
+    if (PlayerSprintBar.progress < PlayerSprintBar.width) {
+      PlayerSprintBar.progress += this.unitRecoverPace;
+    } else {
+      PlayerSprintBar.progress = PlayerSprintBar.width;
+    }
+  }
+
+  start() {
+    super.start();
+  }
+
+  update(timestamp: number) {
+    super.update(timestamp);
+
+    if (GameStateSystem.isGamePaused || UI.isGameMenuOpened) {
+      Player.stop();
+      return;
+    }
+
+    Player.position = Player.body.position;
+    Player.actionArea.position = Player.position;
+
+    if (!this.isInstanceField) {
+      PlayerSprintBar.width = Field.width + Field.strokeWidth * 2;
+      PlayerSprintBar.progress = PlayerSprintBar.width;
+
+      this.isInstanceField = true;
+    }
+
+    this.detectMovementByInput();
   }
 }

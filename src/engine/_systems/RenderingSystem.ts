@@ -1,13 +1,16 @@
-import { CanvasComponent } from "../_components";
-import { _Entity } from "../_entities";
-import { CANVAS_ID } from "../constants/ids";
+import { CanvasComponent } from "@/engine/_components";
+import { _Entity } from "@/engine/_entities";
+import { CANVAS_ID } from "@/engine/constants/ids";
+import { Engine, Render, Runner } from "matter-js";
 import { _System } from "./_System";
 
 interface RenderingSystemProps {
   entities: _Entity[];
+  engine: Engine;
 }
 
 export class RenderingSystem extends _System {
+  render: Render;
   entities: _Entity[];
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -21,6 +24,19 @@ export class RenderingSystem extends _System {
     }).canvasRef;
 
     this.ctx = this.canvas.getContext("2d")!;
+
+    this.render = Render.create({
+      element: this.canvas,
+      engine: props.engine,
+      options: {
+        width: this.canvas.width,
+        height: this.canvas.height,
+      },
+    });
+
+    Render.run(this.render);
+
+    Runner.run(Runner.create(), props.engine);
   }
 
   getCanvas() {

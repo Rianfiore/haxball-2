@@ -1,37 +1,24 @@
-import { PhysicsComponent } from "../_components/PhysicsComponent";
-import { _Entity } from "../_entities";
+import { _Entity } from "@/engine/_entities";
+import { Composite, Engine } from "matter-js";
 import { _System } from "./_System";
 
 interface PhysicsSystemProps {
   entities: _Entity[];
+  engine: Engine;
 }
 export class PhysicsSystem extends _System {
   entities: _Entity[];
-  gravity: number = 9.8;
+  composite: Composite;
 
   constructor(props: PhysicsSystemProps) {
     super(props.entities);
     this.entities = props.entities;
+
+    const entitiesWithBodies = this.entities.filter((entity) => entity.body);
+    const bodies = entitiesWithBodies.flatMap((entity) => entity.body!);
+
+    this.composite = Composite.add(props.engine.world, bodies);
   }
 
-  update() {
-    const entitiesWithPhysicsComponent = this.entities.filter((entity) =>
-      entity.getComponent(PhysicsComponent)
-    );
-
-    for (const entity of entitiesWithPhysicsComponent) {
-      const physicsComponent = entity.getComponent(PhysicsComponent)!;
-
-      // Aplicar redução de velocidade devido à gravidade
-      if (
-        physicsComponent.currentVelocity.dy > 0 ||
-        physicsComponent.currentVelocity.dx > 0
-      ) {
-        physicsComponent.applyFriction();
-      }
-
-      //Suavizar as mudanças agressivas de velocidade
-      physicsComponent.smoothVelocity();
-    }
-  }
+  update() {}
 }

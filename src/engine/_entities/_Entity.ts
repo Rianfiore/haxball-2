@@ -1,16 +1,23 @@
-import { _Component } from "../_components/_Component";
-import { Position } from "../utils/Position";
-import { Script } from "../utils/Script";
+import { _Component } from "@/engine/_components";
+import { Position, Script } from "@/engine/utils";
+import Matter from "matter-js";
+
+interface _EntityProps {
+  position?: Position;
+  body: Matter.Body | Matter.Body[];
+}
 
 export abstract class _Entity {
-  position: Position;
+  static position: Position;
   components: any[];
+  body: Matter.Body | Matter.Body[];
   private scripts: Script[];
 
-  constructor() {
-    this.position = new Position({ x: 0, y: 0 });
+  constructor(props: _EntityProps) {
+    _Entity.position = props.position ?? new Position({ x: 0, y: 0 });
     this.components = [];
     this.scripts = [];
+    this.body = props.body;
   }
 
   addComponent(component: any) {
